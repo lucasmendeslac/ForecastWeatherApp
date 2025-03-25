@@ -34,6 +34,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -321,7 +325,11 @@ fun CurrentWeatherCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                WeatherInfoItem(label = "UV", value = currentWeather.uv.toString())
+                WeatherInfoItem(
+                    label = "UV", 
+                    value = currentWeather.uv.toString(),
+                    description = uvIndexToDescription(currentWeather.uv)
+                )
                 currentWeather.airQualityIndex?.let { index ->
                     WeatherInfoItem(
                         label = "Qualidade do Ar", 
@@ -337,9 +345,16 @@ fun CurrentWeatherCard(
 }
 
 @Composable
-fun WeatherInfoItem(label: String, value: String) {
+fun WeatherInfoItem(
+    label: String, 
+    value: String,
+    description: String? = null
+) {
+    var showDetails by remember { mutableStateOf(false) }
+    
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = if (label == "UV") Modifier.clickable { showDetails = !showDetails } else Modifier
     ) {
         Text(
             text = label,
@@ -351,6 +366,36 @@ fun WeatherInfoItem(label: String, value: String) {
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold
         )
+        
+        description?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = getUvIndexColor(label, value),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        
+        if (label == "UV" && showDetails) {
+            val uvValue = value.toDoubleOrNull() ?: 0.0
+            Card(
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .width(200.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Text(
+                    text = getUvDetailedDescription(uvValue),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+        }
     }
 }
 
@@ -457,17 +502,17 @@ fun HourlyForecastItem(hour: HourlyForecastUiState) {
         )
         
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_water_drop),
-                contentDescription = "Chance de chuva",
-                modifier = Modifier.size(14.dp),
-                tint = Color.Blue
+            Text(
+                text = "💧",
+                style = MaterialTheme.typography.bodyMedium
             )
             Text(
                 text = "${hour.chanceOfRain}%",
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium
             )
         }
         
@@ -517,6 +562,8 @@ fun DailyForecastSection(dailyForecast: List<DailyForecastUiState>) {
 
 @Composable
 fun DailyForecastItem(day: DailyForecastUiState) {
+    var showUvDetails by remember { mutableStateOf(false) }
+    
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -529,17 +576,39 @@ fun DailyForecastItem(day: DailyForecastUiState) {
                 .width(160.dp)
         ) {
             Text(
-                text = formatDate(day.date),
+                text = day.date,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold
             )
+            
             Text(
                 text = translateWeatherCondition(day.condition),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.clickable { showUvDetails = true }
+            ) {
+                Text(
+                    text = "UV: ${day.uv.toInt()}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    text = uvIndexToDescription(day.uv),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when {
+                        day.uv < 3 -> Color(0xFF4CAF50) // Verde - Baixo
+                        day.uv < 6 -> Color(0xFFFFC107) // Amarelo - Moderado
+                        day.uv < 8 -> Color(0xFFFF9800) // Laranja - Alto
+                        day.uv < 11 -> Color(0xFFF44336) // Vermelho - Muito Alto
+                        else -> Color(0xFF9C27B0) // Roxo - Extremo
+                    }
+                )
+            }
         }
         
         // Verificar se é uma condição de céu limpo
@@ -580,22 +649,129 @@ fun DailyForecastItem(day: DailyForecastUiState) {
         }
         
         // Informações de temperatura e chuva à direita
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
+            horizontalAlignment = Alignment.End,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .padding(end = 8.dp)
         ) {
-            Text(
-                text = "🌡️ ${day.minTemperature.toInt()}° / ${day.maxTemperature.toInt()}°",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "🌡️",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "${day.minTemperature.toInt()}° / ${day.maxTemperature.toInt()}°",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+            }
             
-            Text(
-                text = "💧 ${day.chanceOfRain}%",
-                style = MaterialTheme.typography.bodyMedium
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "💧",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "${day.chanceOfRain}%",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+        
+        if (showUvDetails) {
+            UvInfoDialog(
+                uvIndex = day.uv,
+                onDismiss = { showUvDetails = false }
             )
+        }
+    }
+}
+
+@Composable
+fun UvInfoDialog(
+    uvIndex: Double,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .clickable { onDismiss() },
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .padding(16.dp)
+                .width(300.dp),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 8.dp
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Índice UV: ${uvIndex.toInt()}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Text(
+                    text = uvIndexToDescription(uvIndex),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = when {
+                        uvIndex < 3 -> Color(0xFF4CAF50) // Verde - Baixo
+                        uvIndex < 6 -> Color(0xFFFFC107) // Amarelo - Moderado
+                        uvIndex < 8 -> Color(0xFFFF9800) // Laranja - Alto
+                        uvIndex < 11 -> Color(0xFFF44336) // Vermelho - Muito Alto
+                        else -> Color(0xFF9C27B0) // Roxo - Extremo
+                    },
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    text = getUvDetailedDescription(uvIndex),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(end = 8.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .clickable { onDismiss() }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "Fechar",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
     }
 }
@@ -798,11 +974,11 @@ private fun translateWeatherCondition(condition: String): String {
         normalizedCondition.contains("cloudy") && !normalizedCondition.contains("partly") -> "Nublado"
         normalizedCondition.contains("overcast") -> "Encoberto"
         normalizedCondition.contains("mist") -> "Névoa"
-        normalizedCondition.contains("patchy rain nearby") || normalizedCondition.contains("patchy rain possible") -> "Possibilidade de chuva isolada"
-        normalizedCondition.contains("patchy snow possible") -> "Possibilidade de neve isolada"
-        normalizedCondition.contains("patchy sleet possible") -> "Possibilidade de granizo isolado"
-        normalizedCondition.contains("patchy freezing drizzle possible") -> "Possibilidade de garoa congelante isolada"
-        normalizedCondition.contains("thundery outbreaks possible") -> "Possibilidade de trovoadas"
+        normalizedCondition.contains("patchy rain nearby") || normalizedCondition.contains("patchy rain possible") -> "Chuva isolada"
+        normalizedCondition.contains("patchy snow possible") -> "Neve isolada"
+        normalizedCondition.contains("patchy sleet possible") -> "Granizo isolado"
+        normalizedCondition.contains("patchy freezing drizzle possible") -> "Garoa congelante"
+        normalizedCondition.contains("thundery outbreaks possible") -> "Possível trovoada"
         normalizedCondition.contains("blowing snow") -> "Neve com ventos fortes"
         normalizedCondition.contains("blizzard") -> "Nevasca"
         normalizedCondition.contains("fog") && !normalizedCondition.contains("freezing") -> "Nevoeiro"
@@ -842,5 +1018,45 @@ private fun translateWeatherCondition(condition: String): String {
         normalizedCondition.contains("patchy light snow with thunder") -> "Neve leve isolada com trovoadas"
         normalizedCondition.contains("moderate or heavy snow with thunder") -> "Neve moderada a forte com trovoadas"
         else -> condition // Retorna o original se não houver tradução
+    }
+}
+
+// Função para interpretar o índice UV
+private fun uvIndexToDescription(uvIndex: Double): String {
+    return when {
+        uvIndex < 3 -> "Baixo"
+        uvIndex < 6 -> "Moderado"
+        uvIndex < 8 -> "Alto"
+        uvIndex < 11 -> "Muito Alto"
+        else -> "Extremo"
+    }
+}
+
+// Fornece uma descrição detalhada com recomendações de proteção para o índice UV
+private fun getUvDetailedDescription(uvIndex: Double): String {
+    return when {
+        uvIndex < 3 -> "Baixo risco. Proteção mínima necessária para atividades ao ar livre."
+        uvIndex < 6 -> "Risco moderado. Use protetor solar, chapéu e óculos de sol."
+        uvIndex < 8 -> "Risco alto. Reduza a exposição entre 10h e 16h. Use protetor solar FPS 30+."
+        uvIndex < 11 -> "Risco muito alto. Evite exposição entre 10h e 16h. Use proteção máxima."
+        else -> "Risco extremo. Evite qualquer exposição ao sol. Proteção total necessária."
+    }
+}
+
+// Retorna a cor baseada no valor do UV
+private fun getUvIndexColor(label: String, value: String): Color {
+    if (label != "UV") return Color.Gray
+    
+    return try {
+        val uvValue = value.toDoubleOrNull() ?: 0.0
+        when {
+            uvValue < 3 -> Color(0xFF4CAF50) // Verde - Baixo
+            uvValue < 6 -> Color(0xFFFFC107) // Amarelo - Moderado
+            uvValue < 8 -> Color(0xFFFF9800) // Laranja - Alto
+            uvValue < 11 -> Color(0xFFF44336) // Vermelho - Muito Alto
+            else -> Color(0xFF9C27B0) // Roxo - Extremo
+        }
+    } catch (e: Exception) {
+        Color.Gray
     }
 } 
