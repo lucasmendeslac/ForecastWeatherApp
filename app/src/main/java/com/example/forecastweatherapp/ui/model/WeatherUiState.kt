@@ -30,7 +30,8 @@ data class WeatherUiState(
     val searchResults: List<LocationSearchResult> = emptyList(),
     val isSearching: Boolean = false,
     val timeZoneId: String = ZoneId.systemDefault().id,
-    val localTime: String = ""
+    val localTime: String = "",
+    val locationUiState: LocationUiState? = null
 )
 
 data class CurrentWeatherUiState(
@@ -91,6 +92,20 @@ data class LocationSearchResult(
     val country: String,
     val lat: Double,
     val lon: Double
+)
+
+/**
+ * Representa o estado de uma localização para a UI.
+ * Usado para representar cidades favoritas e resultados de pesquisa de localização.
+ */
+data class LocationUiState(
+    val id: String = "",
+    val name: String = "",
+    val region: String = "",
+    val country: String = "",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val isFavorite: Boolean = false
 )
 
 // Funções de extensão para converter objetos do modelo em objetos de UI
