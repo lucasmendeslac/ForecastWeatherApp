@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 
 class WeatherViewModel(
     private val weatherRepository: WeatherRepository,
@@ -255,13 +257,19 @@ class WeatherViewModel(
         }
         
         searchJob = viewModelScope.launch {
-            _uiState.update { it.copy(isSearching = true) }
-            
-            // Pequeno atraso para evitar muitas requisições enquanto digita
-            delay(500)
-            
             try {
+                _uiState.update { it.copy(isSearching = true) }
+                
+                // Pequeno atraso para evitar muitas requisições enquanto digita
+                delay(500)
+                
+                // Verificar se a coroutine foi cancelada antes de fazer a requisição
+                if (!currentCoroutineContext().isActive) return@launch
+                
                 val result = weatherRepository.searchLocation(query)
+                
+                // Verificar novamente se a coroutine foi cancelada após o resultado
+                if (!currentCoroutineContext().isActive) return@launch
                 
                 result.onSuccess { locations ->
                     _uiState.update { 
@@ -271,6 +279,11 @@ class WeatherViewModel(
                         )
                     }
                 }.onFailure { error ->
+                    // Ignorar erros de cancelamento, que são esperados
+                    if (error is kotlinx.coroutines.CancellationException) {
+                        return@launch
+                    }
+                    
                     _uiState.update { 
                         it.copy(
                             isSearching = false, 
@@ -279,6 +292,11 @@ class WeatherViewModel(
                     }
                 }
             } catch (e: Exception) {
+                // Ignorar exceções de cancelamento
+                if (e is kotlinx.coroutines.CancellationException) {
+                    return@launch
+                }
+                
                 _uiState.update { 
                     it.copy(
                         isSearching = false, 

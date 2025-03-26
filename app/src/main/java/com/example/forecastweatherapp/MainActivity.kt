@@ -8,6 +8,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +27,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -135,66 +141,100 @@ fun WeatherAppContent(
 ) {
     var searchActive by remember { mutableStateOf(false) }
     
+    // Efeito para garantir que o estado de pesquisa ativa seja atualizado corretamente
+    DisposableEffect(searchActive) {
+        onDispose {
+            // Limpar resultados quando o componente é descartado
+            onSearchActiveChange(false)
+        }
+    }
+    
+    // Efeito que monitora mudanças no estado da cidade atual para fechar a pesquisa
+    // quando uma nova cidade é carregada a partir da pesquisa
+    LaunchedEffect(uiState.currentWeather?.cityName) {
+        if (uiState.currentWeather != null && searchActive) {
+            // Fecha a pesquisa quando uma nova cidade é carregada
+            searchActive = false
+            onSearchActiveChange(false)
+        }
+    }
+    
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
         ) {
             WeatherSearchBar(
-                query = uiState.searchQuery,
-                onQueryChange = onSearchQueryChange,
-                onSearch = { /*nada, pesquisa em tempo real*/ },
-                onLocationClick = onLocationClick,
-                searchResults = uiState.searchResults,
-                onResultClick = { 
-                    onSearchResultClick(it)
-                    searchActive = false
+                searchQuery = uiState.searchQuery,
+                onSearchQueryChange = { onSearchQueryChange(it) },
+                onSearch = { 
+                    if (it.isNotBlank()) {
+                        onSearchQueryChange(it)
+                    }
                 },
                 isSearching = uiState.isSearching,
-                onClearSearch = { onSearchQueryChange("") },
-                active = searchActive,
-                onActiveChange = { 
-                    searchActive = it
+                onSearchActiveChange = { 
+                    searchActive = it 
                     onSearchActiveChange(it)
+                },
+                searchResults = uiState.searchResults,
+                onSearchResultSelected = { result ->
+                    try {
+                        // Primeiro obtém os dados da cidade
+                        onSearchResultClick(result)
+                        
+                        // O estado searchActive será atualizado pelo LaunchedEffect 
+                        // que monitora mudanças em currentWeather
+                    } catch (e: Exception) {
+                        // Log do erro para depuração
+                        println("Erro ao selecionar resultado: ${e.message}")
+                    }
                 }
             )
             
-            if (uiState.isLoading) {
-                LoadingScreen()
-            } else if (uiState.errorMessage != null) {
-                ErrorScreen(message = uiState.errorMessage)
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    uiState.currentWeather?.let { currentWeather ->
-                        CurrentWeatherCard(
-                            currentWeather = currentWeather,
-                            isFavorite = uiState.isCurrentCityFavorite,
-                            onFavoriteClick = onFavoriteClick
-                        )
-                    }
-                    
-                    uiState.forecast?.let { forecast ->
-                        HourlyForecastSection(hourlyForecast = forecast.hourlyForecast)
+            // Mostra o conteúdo principal apenas quando a pesquisa não está ativa
+            AnimatedVisibility(
+                visible = !searchActive,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                if (uiState.isLoading) {
+                    LoadingScreen()
+                } else if (uiState.errorMessage != null) {
+                    ErrorScreen(message = uiState.errorMessage)
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        uiState.currentWeather?.let { currentWeather ->
+                            CurrentWeatherCard(
+                                currentWeather = currentWeather,
+                                isFavorite = uiState.isCurrentCityFavorite,
+                                onFavoriteClick = onFavoriteClick
+                            )
+                        }
+                        
+                        uiState.forecast?.let { forecast ->
+                            HourlyForecastSection(hourlyForecast = forecast.hourlyForecast)
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            DailyForecastSection(dailyForecast = forecast.dailyForecast)
+                        }
                         
                         Spacer(modifier = Modifier.height(8.dp))
                         
-                        DailyForecastSection(dailyForecast = forecast.dailyForecast)
+                        FavoriteCitiesList(
+                            cities = favoriteCities,
+                            onCityClick = onCityClick,
+                            currentCity = uiState.currentWeather?.cityName,
+                            gpsLocationCity = uiState.gpsLocationCity
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    FavoriteCitiesList(
-                        cities = favoriteCities,
-                        onCityClick = onCityClick,
-                        currentCity = uiState.currentWeather?.cityName,
-                        gpsLocationCity = uiState.gpsLocationCity
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
